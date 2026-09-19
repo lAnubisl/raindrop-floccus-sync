@@ -1,0 +1,12 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/" />
+  <Folder Name="/tests/">
+    <Project Path="tests/RaindropToFloccus.IntegrationTests/RaindropToFloccus.IntegrationTests.csproj" />
+  </Folder>
+  <Project Path="src/RaindropToFloccus/RaindropToFloccus.csproj" />
+</Solution>
