@@ -1,5 +1,4 @@
 using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Helpers;
 using RaindropToFloccus.Models;
 using ApplicationLogger = RaindropToFloccus.Interfaces.ILogger;
 
@@ -248,10 +247,6 @@ public sealed class GitToRaindropInitializationService : IInitialSynchronization
                 group.Key,
                 group.Select(bookmark => bookmark.Id).ToArray(),
                 cancellationToken);
-            foreach (var bookmark in group)
-            {
-                SynchronizationItemLoggingHelper.Deleting(_logger, "bookmark", bookmark.Title, "Raindrop");
-            }
         }
 
         if (collections.Count > 0)
@@ -260,13 +255,9 @@ public sealed class GitToRaindropInitializationService : IInitialSynchronization
             var collectionIds = collections
                 .OrderByDescending(collection => depths[collection.Id])
                 .ThenBy(collection => collection.Id)
+                .Select(collection => collection.Id)
                 .ToArray();
-            await _raindropClient.DeleteCollectionsAsync(
-                collectionIds.Select(collection => collection.Id).ToArray(), cancellationToken);
-            foreach (var collection in collectionIds)
-            {
-                SynchronizationItemLoggingHelper.Deleting(_logger, "folder", collection.Title, "Raindrop");
-            }
+            await _raindropClient.DeleteCollectionsAsync(collectionIds, cancellationToken);
         }
 
         var remainingBookmarks = await _raindropClient.GetActiveBookmarksAsync(cancellationToken);
@@ -304,8 +295,6 @@ public sealed class GitToRaindropInitializationService : IInitialSynchronization
                 throw new InvalidOperationException(
                     "Raindrop returned an inconsistent collection during initial import.");
             }
-            SynchronizationItemLoggingHelper.Creating(
-                _logger, "folder", sourceFolder.Folder.Title, "Raindrop");
 
             raindropIdByXbelId.Add(sourceFolder.Folder.Id, created.Id);
             mappings.Add(new FolderIdentityMapping(
@@ -345,8 +334,6 @@ public sealed class GitToRaindropInitializationService : IInitialSynchronization
                 throw new InvalidOperationException(
                     "Raindrop returned an inconsistent bookmark during initial import.");
             }
-            SynchronizationItemLoggingHelper.Creating(
-                _logger, "bookmark", sourceBookmark.Bookmark.Title, "Raindrop");
 
             mappings.Add(new BookmarkIdentityMapping(
                 sourceBookmark.StableId,
