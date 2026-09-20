@@ -7,6 +7,7 @@
   <Folder Name="/src/" />
   <Folder Name="/tests/">
     <Project Path="tests/RaindropToFloccus.IntegrationTests/RaindropToFloccus.IntegrationTests.csproj" />
+    <Project Path="tests/RaindropToFloccus.Tests/RaindropToFloccus.Tests.csproj" />
   </Folder>
   <Project Path="src/RaindropToFloccus/RaindropToFloccus.csproj" />
 </Solution>
