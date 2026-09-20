@@ -15,6 +15,7 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
         "+//IDN python.org//DTD XML Bookmark Exchange Language 1.0//EN//XML";
     private const string XbelSystemIdentifier = "http://pyxml.sourceforge.net/topics/dtds/xbel.dtd";
     private const string HighestIdCommentSuffix = "for Floccus bookmark sync browser extension";
+    private const string FloccusXmlDeclaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
     private const long MaximumFloccusId = 9_007_199_254_740_991;
     private const int MaximumFolderDepth = 128;
 
@@ -70,7 +71,7 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
             IndentChars = "  ",
             NewLineChars = "\n",
             NewLineHandling = NewLineHandling.Replace,
-            OmitXmlDeclaration = false
+            OmitXmlDeclaration = true
         };
 
         using (var writer = XmlWriter.Create(stream, settings))
@@ -78,7 +79,7 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
             xmlDocument.Save(writer);
         }
 
-        return Encoding.UTF8.GetString(stream.ToArray());
+        return FloccusXmlDeclaration + "\n" + Encoding.UTF8.GetString(stream.ToArray());
     }
 
     private static XDocument ReadXmlDocument(string content)
