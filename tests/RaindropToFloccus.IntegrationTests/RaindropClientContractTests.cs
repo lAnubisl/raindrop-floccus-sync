@@ -69,7 +69,7 @@ public sealed class RaindropClientContractTests
         var actual = await client.UpdateBookmarkAsync(42, new(-1, originalTitle, link));
         Assert.Equal(storedTitle, actual.Title);
         Assert.Equal(42, actual.Id);
-        Assert.Equal($"Changing bookmark \"{storedTitle}\" in Raindrop.", Assert.Single(logger.Information));
+        Assert.Equal($"Changed bookmark \"{storedTitle}\" in Raindrop.", Assert.Single(logger.Information));
         using var body = JsonDocument.Parse(Assert.Single(http.RequestBodies));
         Assert.Equal(originalTitle, body.RootElement.GetProperty("title").GetString());
         Assert.Equal(link, body.RootElement.GetProperty("link").GetString());

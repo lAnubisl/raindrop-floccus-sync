@@ -138,7 +138,7 @@ public sealed class RaindropApiClient : IRaindropClient
         ValidateCollection(collection);
         var result = await SendAsync(HttpMethod.Post, "collection", CollectionBody(collection), "create collection",
             root => ReadCollection(ReadProperty(root, "item")), cancellationToken);
-        _logger.Info($"Adding folder \"{result.Title}\" to Raindrop.");
+        _logger.Info($"Added folder \"{result.Title}\" to Raindrop.");
         return result;
     }
 
@@ -154,7 +154,7 @@ public sealed class RaindropApiClient : IRaindropClient
 
         var result = await SendAsync(HttpMethod.Put, $"collection/{IdText(id)}", CollectionBody(collection),
             "update collection", root => ReadUpdatedCollection(root, id), cancellationToken);
-        _logger.Info($"Changing folder \"{result.Title}\" in Raindrop.");
+        _logger.Info($"Changed folder \"{result.Title}\" in Raindrop.");
         return result;
     }
 
@@ -171,7 +171,7 @@ public sealed class RaindropApiClient : IRaindropClient
                 _ => true, cancellationToken, allowNoContent: true);
             foreach (var collection in batch)
             {
-                _logger.Info($"Removing folder \"{collection.Title}\" from Raindrop.");
+                _logger.Info($"Removed folder \"{collection.Title}\" from Raindrop.");
             }
         }
     }
@@ -196,7 +196,7 @@ public sealed class RaindropApiClient : IRaindropClient
                     ReadCreatedBookmarkBatch(root, batch.Length, seenIds), cancellationToken);
             foreach (var bookmark in created)
             {
-                _logger.Info($"Adding bookmark \"{bookmark.Title}\" to Raindrop.");
+                _logger.Info($"Added bookmark \"{bookmark.Title}\" to Raindrop.");
             }
             yield return Array.AsReadOnly(created);
         }
@@ -209,7 +209,7 @@ public sealed class RaindropApiClient : IRaindropClient
         ValidateBookmark(bookmark);
         var result = await SendAsync(HttpMethod.Put, $"raindrop/{IdText(id)}", BookmarkBody(bookmark),
             "update bookmark", root => ReadUpdatedBookmark(root, id), cancellationToken);
-        _logger.Info($"Changing bookmark \"{result.Title}\" in Raindrop.");
+        _logger.Info($"Changed bookmark \"{result.Title}\" in Raindrop.");
         return result;
     }
 
@@ -229,7 +229,7 @@ public sealed class RaindropApiClient : IRaindropClient
                 root => ValidateMoveResponse(root, batch.Length), cancellationToken, allowNoContent: true);
             foreach (var bookmark in batch)
             {
-                _logger.Info($"Changing bookmark \"{bookmark.Title}\" in Raindrop.");
+                _logger.Info($"Changed bookmark \"{bookmark.Title}\" in Raindrop.");
             }
         }
     }
@@ -250,7 +250,7 @@ public sealed class RaindropApiClient : IRaindropClient
                 cancellationToken, allowNoContent: true);
             foreach (var bookmark in batch)
             {
-                _logger.Info($"Removing bookmark \"{bookmark.Title}\" from Raindrop.");
+                _logger.Info($"Removed bookmark \"{bookmark.Title}\" from Raindrop.");
             }
         }
     }

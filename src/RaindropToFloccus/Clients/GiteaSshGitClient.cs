@@ -412,7 +412,7 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
             if (!currentItems.TryGetValue(item.Key, out var currentItem)
                 || item.Value.IsFolder != currentItem.IsFolder)
             {
-                LogChange("Removing", item.Value, "from");
+                LogChange("Removed", item.Value, "from");
             }
         }
 
@@ -421,11 +421,11 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
             if (!previousItems.TryGetValue(item.Key, out var previousItem)
                 || item.Value.IsFolder != previousItem.IsFolder)
             {
-                LogChange("Adding", item.Value, "to");
+                LogChange("Added", item.Value, "to");
             }
             else if (item.Value != previousItem)
             {
-                LogChange("Changing", item.Value, "in");
+                LogChange("Changed", item.Value, "in");
             }
         }
     }
