@@ -132,17 +132,17 @@ public sealed class RaindropApiClient : IRaindropClient
         return items;
     }
 
-    public Task<RaindropCollection> CreateCollectionAsync(
+    public async Task<RaindropCollection> CreateCollectionAsync(
         RaindropCollectionWrite collection, CancellationToken cancellationToken = default)
     {
         ValidateCollection(collection);
-        return LogSuccessfulWriteAsync(
-            SendAsync(HttpMethod.Post, "collection", CollectionBody(collection), "create collection",
-                root => ReadCollection(ReadProperty(root, "item")), cancellationToken),
-            result => $"Adding folder \"{result.Title}\" to Raindrop.");
+        var result = await SendAsync(HttpMethod.Post, "collection", CollectionBody(collection), "create collection",
+            root => ReadCollection(ReadProperty(root, "item")), cancellationToken);
+        _logger.Info($"Adding folder \"{result.Title}\" to Raindrop.");
+        return result;
     }
 
-    public Task<RaindropCollection> UpdateCollectionAsync(
+    public async Task<RaindropCollection> UpdateCollectionAsync(
         long id, RaindropCollectionWrite collection, CancellationToken cancellationToken = default)
     {
         ValidatePositiveId(id);
@@ -152,10 +152,10 @@ public sealed class RaindropApiClient : IRaindropClient
             throw new ArgumentException("A collection cannot be its own parent.", nameof(collection));
         }
 
-        return LogSuccessfulWriteAsync(
-            SendAsync(HttpMethod.Put, $"collection/{IdText(id)}", CollectionBody(collection),
-                "update collection", root => ReadUpdatedCollection(root, id), cancellationToken),
-            result => $"Changing folder \"{result.Title}\" in Raindrop.");
+        var result = await SendAsync(HttpMethod.Put, $"collection/{IdText(id)}", CollectionBody(collection),
+            "update collection", root => ReadUpdatedCollection(root, id), cancellationToken);
+        _logger.Info($"Changing folder \"{result.Title}\" in Raindrop.");
+        return result;
     }
 
     public async Task DeleteCollectionsAsync(IReadOnlyList<RaindropCollection> collections,
@@ -202,15 +202,15 @@ public sealed class RaindropApiClient : IRaindropClient
         }
     }
 
-    public Task<RaindropBookmark> UpdateBookmarkAsync(long id, RaindropBookmarkWrite bookmark,
+    public async Task<RaindropBookmark> UpdateBookmarkAsync(long id, RaindropBookmarkWrite bookmark,
         CancellationToken cancellationToken = default)
     {
         ValidatePositiveId(id);
         ValidateBookmark(bookmark);
-        return LogSuccessfulWriteAsync(
-            SendAsync(HttpMethod.Put, $"raindrop/{IdText(id)}", BookmarkBody(bookmark), "update bookmark",
-                root => ReadUpdatedBookmark(root, id), cancellationToken),
-            result => $"Changing bookmark \"{result.Title}\" in Raindrop.");
+        var result = await SendAsync(HttpMethod.Put, $"raindrop/{IdText(id)}", BookmarkBody(bookmark),
+            "update bookmark", root => ReadUpdatedBookmark(root, id), cancellationToken);
+        _logger.Info($"Changing bookmark \"{result.Title}\" in Raindrop.");
+        return result;
     }
 
     public async Task MoveBookmarksAsync(long sourceCollectionId, long targetCollectionId,
@@ -253,13 +253,6 @@ public sealed class RaindropApiClient : IRaindropClient
                 _logger.Info($"Removing bookmark \"{bookmark.Title}\" from Raindrop.");
             }
         }
-    }
-
-    private async Task<T> LogSuccessfulWriteAsync<T>(Task<T> write, Func<T, string> createMessage)
-    {
-        var result = await write;
-        _logger.Info(createMessage(result));
-        return result;
     }
 
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, string operation,
