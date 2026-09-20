@@ -16,7 +16,8 @@ public interface IRaindropClient
         long id, RaindropCollectionWrite collection, CancellationToken cancellationToken = default);
 
     /// <summary>Removes only the explicitly listed user collections. Include descendants explicitly.</summary>
-    Task DeleteCollectionsAsync(IReadOnlyList<long> ids, CancellationToken cancellationToken = default);
+    Task DeleteCollectionsAsync(
+        IReadOnlyList<RaindropCollection> collections, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates batches of at most 100 items, yielding each confirmed batch before starting the next.
@@ -32,11 +33,11 @@ public interface IRaindropClient
     Task<RaindropBookmark> UpdateBookmarkAsync(
         long id, RaindropBookmarkWrite bookmark, CancellationToken cancellationToken = default);
 
-    /// <summary>Moves explicit IDs from one active collection. Earlier batches may succeed before a failure.</summary>
+    /// <summary>Moves explicitly listed bookmarks from one active collection. Earlier batches may succeed before a failure.</summary>
     Task MoveBookmarksAsync(long sourceCollectionId, long targetCollectionId,
-        IReadOnlyList<long> ids, CancellationToken cancellationToken = default);
+        IReadOnlyList<RaindropBookmark> bookmarks, CancellationToken cancellationToken = default);
 
-    /// <summary>Moves explicit IDs to Trash, never permanently deletes. Earlier batches may succeed before a failure.</summary>
+    /// <summary>Moves explicitly listed bookmarks to Trash, never permanently deletes. Earlier batches may succeed before a failure.</summary>
     Task TrashBookmarksAsync(long sourceCollectionId,
-        IReadOnlyList<long> ids, CancellationToken cancellationToken = default);
+        IReadOnlyList<RaindropBookmark> bookmarks, CancellationToken cancellationToken = default);
 }

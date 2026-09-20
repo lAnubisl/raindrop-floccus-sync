@@ -65,7 +65,7 @@ public sealed class RaindropClientTests(LiveAccountFixture account) : IClassFixt
         var empty = await account.CreateCollectionAsync("delete-empty");
         var keeper = await account.CreateCollectionAsync("delete-keeper");
         var bookmark = Assert.Single(await account.CreateBookmarksAsync(account.Bookmark(child.Id, "deleted-with-folder")));
-        await account.Client.DeleteCollectionsAsync([root.Id, child.Id, empty.Id]);
+        await account.Client.DeleteCollectionsAsync([root, child, empty]);
         var collections = await account.Client.GetCollectionsAsync();
         Assert.DoesNotContain(collections, item => new[] { root.Id, child.Id, empty.Id }.Contains(item.Id));
         Assert.Contains(collections, item => item.Id == keeper.Id);
@@ -160,14 +160,15 @@ public sealed class RaindropClientTests(LiveAccountFixture account) : IClassFixt
         Assert.Contains(account.Observer.Requests.Skip(start), r => r.Method == "GET" && r.PathAndQuery.Contains("page=2&"));
 
         start = account.Observer.Requests.Count;
-        await account.Client.MoveBookmarksAsync(source.Id, target.Id, ids.ToArray());
+        await account.Client.MoveBookmarksAsync(source.Id, target.Id, actual);
         AssertBatchSizes(start, "PUT", $"/rest/v1/raindrops/{source.Id}", 100, 1);
         snapshot = await account.Client.GetActiveBookmarksAsync();
         Assert.Equal(101, snapshot.Count(item => ids.Contains(item.Id) && item.CollectionId == target.Id));
         Assert.Contains(snapshot, item => item.Id == keeper.Id && item.CollectionId == source.Id);
 
         start = account.Observer.Requests.Count;
-        await account.Client.TrashBookmarksAsync(target.Id, ids.ToArray());
+        await account.Client.TrashBookmarksAsync(target.Id,
+            snapshot.Where(item => ids.Contains(item.Id)).ToArray());
         AssertBatchSizes(start, "DELETE", $"/rest/v1/raindrops/{target.Id}", 100, 1);
         Assert.DoesNotContain(await account.Client.GetActiveBookmarksAsync(), item => ids.Contains(item.Id));
         Assert.Equal(-99, CollectionId(await account.ReadBookmarkRawAsync(created[0].Id)));
@@ -196,11 +197,11 @@ public sealed class RaindropClientTests(LiveAccountFixture account) : IClassFixt
         var created = Assert.Single(await account.CreateBookmarksAsync(account.Bookmark(-1, "unsorted")));
         Assert.Equal(-1, created.CollectionId);
         Assert.Contains(await account.Client.GetActiveBookmarksAsync(), item => item.Id == created.Id && item.CollectionId == -1);
-        await account.Client.MoveBookmarksAsync(-1, folder.Id, [created.Id]);
+        await account.Client.MoveBookmarksAsync(-1, folder.Id, [created]);
         Assert.Equal(folder.Id, CollectionId(await account.ReadBookmarkRawAsync(created.Id)));
-        await account.Client.MoveBookmarksAsync(folder.Id, -1, [created.Id]);
+        await account.Client.MoveBookmarksAsync(folder.Id, -1, [created]);
         Assert.Equal(-1, CollectionId(await account.ReadBookmarkRawAsync(created.Id)));
-        await account.Client.TrashBookmarksAsync(-1, [created.Id]);
+        await account.Client.TrashBookmarksAsync(-1, [created]);
         Assert.Equal(-99, CollectionId(await account.ReadBookmarkRawAsync(created.Id)));
     }
 
@@ -209,8 +210,8 @@ public sealed class RaindropClientTests(LiveAccountFixture account) : IClassFixt
     {
         var folder = await account.CreateCollectionAsync("safe-trash");
         var created = Assert.Single(await account.CreateBookmarksAsync(account.Bookmark(folder.Id, "safe-trash")));
-        await account.Client.TrashBookmarksAsync(folder.Id, [created.Id]);
-        await account.Client.TrashBookmarksAsync(folder.Id, [created.Id]);
+        await account.Client.TrashBookmarksAsync(folder.Id, [created]);
+        await account.Client.TrashBookmarksAsync(folder.Id, [created]);
         Assert.Equal(-99, CollectionId(await account.ReadBookmarkRawAsync(created.Id)));
         Assert.DoesNotContain(await account.Client.GetActiveBookmarksAsync(), item => item.Id == created.Id);
     }
@@ -242,7 +243,7 @@ public sealed class RaindropClientTests(LiveAccountFixture account) : IClassFixt
     public async Task Invalid_token_returns_a_sanitized_authentication_error()
     {
         var invalidConfiguration = new IntegrationTestConfiguration("deliberately-invalid-integration-token");
-        var client = new RaindropApiClient(account.Factory, invalidConfiguration);
+        var client = new RaindropApiClient(account.Factory, invalidConfiguration, new TestLogger());
         var error = await Assert.ThrowsAsync<RaindropApiException>(() => client.GetCollectionsAsync());
         Assert.True(error.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden);
         Assert.True(error.IsAuthenticationFailure);
@@ -260,11 +261,13 @@ public sealed class RaindropClientTests(LiveAccountFixture account) : IClassFixt
         await account.Client.DeleteCollectionsAsync([]);
         await account.Client.MoveBookmarksAsync(-1, 1, []);
         await account.Client.TrashBookmarksAsync(-1, []);
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => account.Client.TrashBookmarksAsync(-99, [1]));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => account.Client.TrashBookmarksAsync(0, [1]));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => account.Client.MoveBookmarksAsync(-1, -99, [1]));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => account.Client.DeleteCollectionsAsync([1, -99]));
-        await Assert.ThrowsAsync<ArgumentException>(() => account.Client.TrashBookmarksAsync(-1, [1, 1]));
+        var bookmark = new RaindropBookmark(1, -1, "bookmark", "https://example.com");
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => account.Client.TrashBookmarksAsync(-99, [bookmark]));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => account.Client.TrashBookmarksAsync(0, [bookmark]));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => account.Client.MoveBookmarksAsync(-1, -99, [bookmark]));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => account.Client.DeleteCollectionsAsync(
+            [new RaindropCollection(1, null, "valid"), new RaindropCollection(-99, null, "invalid")]));
+        await Assert.ThrowsAsync<ArgumentException>(() => account.Client.TrashBookmarksAsync(-1, [bookmark, bookmark]));
         await Assert.ThrowsAsync<ArgumentException>(() => account.Client.UpdateCollectionAsync(1, new("self", 1)));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => account.CreateBookmarksAsync(
             account.Bookmark(-1, "valid-but-must-not-be-sent"), account.Bookmark(-99, "invalid")));
@@ -280,7 +283,8 @@ public sealed class RaindropClientTests(LiveAccountFixture account) : IClassFixt
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => account.Client.GetCollectionsAsync(stop.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => account.Client.GetActiveBookmarksAsync(stop.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => account.Client.CreateCollectionAsync(new(account.Prefix + "never-created"), stop.Token));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => account.Client.TrashBookmarksAsync(-1, [1], stop.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => account.Client.TrashBookmarksAsync(-1,
+            [new RaindropBookmark(1, -1, "never-removed", "https://example.com")], stop.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await foreach (var batch in account.Client.CreateBookmarksAsync([account.Bookmark(-1, "never-created")], stop.Token))

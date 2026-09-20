@@ -10,7 +10,19 @@ public static class OfflineRaindropData
     public const string Link = "https://example.com/bookmark";
 
     public static RaindropApiClient Client(IHttpClientFactory factory) =>
-        new(factory, new IntegrationTestConfiguration(Token));
+        new(factory, new IntegrationTestConfiguration(Token), new TestLogger());
+
+    public static RaindropBookmark ExistingBookmark(long id, long collectionId = -1) =>
+        new(id, collectionId, $"item-{id}", $"https://example.com/{id}");
+
+    public static RaindropBookmark[] ExistingBookmarks(IEnumerable<long> ids, long collectionId = -1) =>
+        ids.Select(id => ExistingBookmark(id, collectionId)).ToArray();
+
+    public static RaindropCollection ExistingCollection(long id) =>
+        new(id, null, $"folder-{id}");
+
+    public static RaindropCollection[] ExistingCollections(IEnumerable<long> ids) =>
+        ids.Select(ExistingCollection).ToArray();
 
     public static RaindropBookmarkWrite[] Inputs(int count) => Enumerable.Range(0, count)
         .Select(i => new RaindropBookmarkWrite(-1, $"item-{i}", $"https://example.com/{i}")).ToArray();

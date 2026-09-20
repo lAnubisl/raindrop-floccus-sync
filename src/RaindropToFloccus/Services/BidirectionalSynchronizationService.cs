@@ -315,7 +315,7 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
             await VerifyRaindropAsync(journal, cancellationToken);
             if (journal.ExpectedBookmarks.Any(item => item.CollectionId == leaf.Id))
                 throw Recovery("A collection scheduled for deletion still contains retained bookmarks.");
-            journal = await DeleteCollectionAsync(journal, leaf.Id, cancellationToken);
+            journal = await DeleteCollectionAsync(journal, leaf, cancellationToken);
             deletedIds.Remove(leaf.Id);
         }
         return journal;
@@ -327,14 +327,14 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
             && !collections.Any(child => child.ParentId == item.Id));
 
     private Task<SynchronizationJournal> DeleteCollectionAsync(SynchronizationJournal journal,
-        long collectionId, CancellationToken cancellationToken) =>
-        WriteRaindropAsync(journal, "delete collection", collectionId, DeleteRaindropCollectionAsync,
+        RaindropCollection collection, CancellationToken cancellationToken) =>
+        WriteRaindropAsync(journal, "delete collection", collection, DeleteRaindropCollectionAsync,
             AcceptDeletedCollection, cancellationToken);
 
-    private async Task<long> DeleteRaindropCollectionAsync(long collectionId)
+    private async Task<long> DeleteRaindropCollectionAsync(RaindropCollection collection)
     {
-        await _raindrop.DeleteCollectionsAsync([collectionId], CancellationToken.None);
-        return collectionId;
+        await _raindrop.DeleteCollectionsAsync([collection], CancellationToken.None);
+        return collection.Id;
     }
 
     private static SynchronizationJournal AcceptDeletedCollection(SynchronizationJournal journal,
@@ -424,16 +424,15 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
     private Task<SynchronizationJournal> TrashBookmarkBatchAsync(SynchronizationJournal journal,
         long sourceCollectionId, IReadOnlyList<RaindropBookmark> batch, CancellationToken cancellationToken)
     {
-        var ids = batch.Select(item => item.Id).ToHashSet();
-        return WriteRaindropAsync(journal, "trash bookmarks", (sourceCollectionId, ids),
+        return WriteRaindropAsync(journal, "trash bookmarks", (sourceCollectionId, batch),
             TrashRaindropBookmarksAsync, AcceptTrashedBookmarks, cancellationToken);
     }
 
     private async Task<HashSet<long>> TrashRaindropBookmarksAsync(
-        (long SourceCollectionId, HashSet<long> BookmarkIds) batch)
+        (long SourceCollectionId, IReadOnlyList<RaindropBookmark> Bookmarks) batch)
     {
-        await _raindrop.TrashBookmarksAsync(batch.SourceCollectionId, batch.BookmarkIds.ToArray(), CancellationToken.None);
-        return batch.BookmarkIds;
+        await _raindrop.TrashBookmarksAsync(batch.SourceCollectionId, batch.Bookmarks, CancellationToken.None);
+        return batch.Bookmarks.Select(item => item.Id).ToHashSet();
     }
 
     private static SynchronizationJournal AcceptTrashedBookmarks(SynchronizationJournal journal,
@@ -549,7 +548,11 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
         if (currentState != stateContent)
             await _files.WriteStateAtomicallyAsync(stateContent, cancellationToken);
         await _git.CommitSynchronizationFilesAsync("Synchronize Raindrop and Floccus bookmarks", cancellationToken);
-        if (!await _git.PushSynchronizationFilesIfRemoteUnchangedAsync(journal.BaseRevision, cancellationToken))
+        if (!await _git.PushSynchronizationFilesIfRemoteUnchangedAsync(
+                journal.BaseRevision,
+                _xbel.Parse(journal.SourceXbelContent),
+                _xbel.Parse(journal.Plan.XbelContent),
+                cancellationToken))
         {
             return false;
         }

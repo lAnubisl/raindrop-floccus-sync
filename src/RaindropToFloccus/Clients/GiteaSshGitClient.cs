@@ -173,14 +173,19 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
 
     public async Task<bool> PushSynchronizationFilesIfRemoteUnchangedAsync(
         string expectedRemoteRevision,
+        XbelDocument previousXbel,
+        XbelDocument currentXbel,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedRemoteRevision);
+        ArgumentNullException.ThrowIfNull(previousXbel);
+        ArgumentNullException.ThrowIfNull(currentXbel);
         await _operationLock.WaitAsync(cancellationToken);
         try
         {
             await InitializeCoreAsync(cancellationToken);
             _logger.Info("Pushing synchronization changes with a Git revision lease.");
+            LogXbelChanges(previousXbel, currentXbel);
             var push = await RunGitAllowingExitCodesAsync(
                 "push synchronization files with revision lease",
                 ["push", "--porcelain", $"--force-with-lease=refs/heads/{BranchName}:{expectedRemoteRevision}",
@@ -397,6 +402,65 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
         return result.StandardOutput.Trim();
     }
 
+    private void LogXbelChanges(XbelDocument previous, XbelDocument current)
+    {
+        var previousItems = Flatten(previous);
+        var currentItems = Flatten(current);
+
+        foreach (var item in previousItems)
+        {
+            if (!currentItems.TryGetValue(item.Key, out var currentItem)
+                || item.Value.IsFolder != currentItem.IsFolder)
+            {
+                LogChange("Removing", item.Value, "from");
+            }
+        }
+
+        foreach (var item in currentItems)
+        {
+            if (!previousItems.TryGetValue(item.Key, out var previousItem)
+                || item.Value.IsFolder != previousItem.IsFolder)
+            {
+                LogChange("Adding", item.Value, "to");
+            }
+            else if (item.Value != previousItem)
+            {
+                LogChange("Changing", item.Value, "in");
+            }
+        }
+    }
+
+    private void LogChange(string action, XbelLogItem item, string preposition)
+    {
+        var type = item.IsFolder ? "folder" : "bookmark";
+        _logger.Info($"{action} {type} \"{item.Title}\" {preposition} Gitea.");
+    }
+
+    private static Dictionary<long, XbelLogItem> Flatten(XbelDocument document)
+    {
+        var result = new Dictionary<long, XbelLogItem>();
+        AddItems(document.Items, null, result);
+        return result;
+    }
+
+    private static void AddItems(IEnumerable<XbelItem> items, long? parentId,
+        Dictionary<long, XbelLogItem> result)
+    {
+        foreach (var item in items)
+        {
+            switch (item)
+            {
+                case XbelFolder folder:
+                    result.Add(folder.Id, new XbelLogItem(true, parentId, folder.Title, null));
+                    AddItems(folder.Children, folder.Id, result);
+                    break;
+                case XbelBookmark bookmark:
+                    result.Add(bookmark.Id, new XbelLogItem(false, parentId, bookmark.Title, bookmark.Url));
+                    break;
+            }
+        }
+    }
+
     private Task<CommandResult> RunGitAsync(
         string operation,
         IReadOnlyList<string> arguments,
@@ -439,4 +503,6 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
 
         return result;
     }
+
+    private sealed record XbelLogItem(bool IsFolder, long? ParentId, string Title, string? Url);
 }

@@ -115,11 +115,13 @@ public sealed class RaindropBatchAndPaginationTests
         };
         var client = Client(http);
         var ids = Ids(1, 201).ToArray();
+        var bookmarks = ExistingBookmarks(ids);
+        var collections = ExistingCollections(ids);
         var error = await Assert.ThrowsAsync<RaindropApiException>(async () =>
         {
-            if (operation == "move") await client.MoveBookmarksAsync(-1, 2, ids);
-            else if (operation == "trash") await client.TrashBookmarksAsync(-1, ids);
-            else await client.DeleteCollectionsAsync(ids);
+            if (operation == "move") await client.MoveBookmarksAsync(-1, 2, bookmarks);
+            else if (operation == "trash") await client.TrashBookmarksAsync(-1, bookmarks);
+            else await client.DeleteCollectionsAsync(collections);
         });
         Assert.True(error.OutcomeMayBeUnknown);
         Assert.Equal(2, calls);
@@ -138,7 +140,8 @@ public sealed class RaindropBatchAndPaginationTests
         // bookmarks were changed. Keep this regression red if the client silently ignores it.
         // This is not applied to DELETE, where a repeated request can legitimately modify zero.
         using var http = new ScriptedHttpClientFactory($"{{\"result\":true,\"modified\":{modified}}}");
-        var error = await Assert.ThrowsAsync<RaindropApiException>(() => Client(http).MoveBookmarksAsync(-1, 2, [1, 2]));
+        var error = await Assert.ThrowsAsync<RaindropApiException>(() =>
+            Client(http).MoveBookmarksAsync(-1, 2, ExistingBookmarks([1, 2])));
         Assert.True(error.OutcomeMayBeUnknown);
         Assert.Single(http.Paths);
     }
@@ -150,7 +153,8 @@ public sealed class RaindropBatchAndPaginationTests
         {
             RespondAsync = (_, _) => Task.FromResult(ScriptedHttpClientFactory.JsonResponse("{}", HttpStatusCode.NotFound))
         };
-        var error = await Assert.ThrowsAsync<RaindropApiException>(() => Client(http).MoveBookmarksAsync(-1, 2, [1]));
+        var error = await Assert.ThrowsAsync<RaindropApiException>(() =>
+            Client(http).MoveBookmarksAsync(-1, 2, [ExistingBookmark(1)]));
         Assert.Equal(HttpStatusCode.NotFound, error.StatusCode);
         Assert.False(error.IsTransient);
         Assert.Equal(new[] { "PUT" }, http.Methods);
@@ -172,7 +176,7 @@ public sealed class RaindropBatchAndPaginationTests
     public async Task Repeated_scoped_trash_accepts_zero_modified_without_permanent_deletion()
     {
         using var http = new ScriptedHttpClientFactory("{\"result\":true,\"modified\":0}");
-        await Client(http).TrashBookmarksAsync(-1, [1]);
+        await Client(http).TrashBookmarksAsync(-1, [ExistingBookmark(1)]);
         Assert.Equal(new[] { "/rest/v1/raindrops/-1" }, http.Paths);
         Assert.Equal(new[] { "DELETE" }, http.Methods);
         using var request = JsonDocument.Parse(Assert.Single(http.RequestBodies));
