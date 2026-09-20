@@ -1,16 +1,23 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG IMAGE_PLATFORM=linux/amd64
+ARG DOTNET_RUNTIME=linux-x64
+
+FROM --platform=${IMAGE_PLATFORM} mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG DOTNET_RUNTIME
 WORKDIR /source
 
 COPY src/RaindropToFloccus/RaindropToFloccus.csproj src/RaindropToFloccus/
-RUN dotnet restore src/RaindropToFloccus/RaindropToFloccus.csproj
+RUN dotnet restore src/RaindropToFloccus/RaindropToFloccus.csproj \
+    --runtime "${DOTNET_RUNTIME}"
 
 COPY src/RaindropToFloccus/ src/RaindropToFloccus/
 RUN dotnet publish src/RaindropToFloccus/RaindropToFloccus.csproj \
     --configuration Release \
+    --runtime "${DOTNET_RUNTIME}" \
+    --self-contained false \
     --no-restore \
     --output /app
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM --platform=${IMAGE_PLATFORM} mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates curl git openssh-client \
     && rm -rf /var/lib/apt/lists/*
