@@ -185,7 +185,6 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
         {
             await InitializeCoreAsync(cancellationToken);
             _logger.Info("Pushing synchronization changes with a Git revision lease.");
-            LogXbelChanges(previousXbel, currentXbel);
             var push = await RunGitAllowingExitCodesAsync(
                 "push synchronization files with revision lease",
                 ["push", "--porcelain", $"--force-with-lease=refs/heads/{BranchName}:{expectedRemoteRevision}",
@@ -194,6 +193,7 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
                 cancellationToken);
             if (push.ExitCode == 0)
             {
+                LogXbelChanges(previousXbel, currentXbel);
                 return true;
             }
 

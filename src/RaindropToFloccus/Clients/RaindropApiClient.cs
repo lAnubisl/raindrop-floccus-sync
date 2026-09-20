@@ -136,9 +136,10 @@ public sealed class RaindropApiClient : IRaindropClient
         RaindropCollectionWrite collection, CancellationToken cancellationToken = default)
     {
         ValidateCollection(collection);
-        _logger.Info($"Adding folder \"{collection.Title}\" to Raindrop.");
-        return SendAsync(HttpMethod.Post, "collection", CollectionBody(collection), "create collection",
-            root => ReadCollection(ReadProperty(root, "item")), cancellationToken);
+        return LogSuccessfulWriteAsync(
+            SendAsync(HttpMethod.Post, "collection", CollectionBody(collection), "create collection",
+                root => ReadCollection(ReadProperty(root, "item")), cancellationToken),
+            result => $"Adding folder \"{result.Title}\" to Raindrop.");
     }
 
     public Task<RaindropCollection> UpdateCollectionAsync(
@@ -151,9 +152,10 @@ public sealed class RaindropApiClient : IRaindropClient
             throw new ArgumentException("A collection cannot be its own parent.", nameof(collection));
         }
 
-        _logger.Info($"Changing folder \"{collection.Title}\" in Raindrop.");
-        return SendAsync(HttpMethod.Put, $"collection/{IdText(id)}", CollectionBody(collection),
-            "update collection", root => ReadUpdatedCollection(root, id), cancellationToken);
+        return LogSuccessfulWriteAsync(
+            SendAsync(HttpMethod.Put, $"collection/{IdText(id)}", CollectionBody(collection),
+                "update collection", root => ReadUpdatedCollection(root, id), cancellationToken),
+            result => $"Changing folder \"{result.Title}\" in Raindrop.");
     }
 
     public async Task DeleteCollectionsAsync(IReadOnlyList<RaindropCollection> collections,
@@ -164,14 +166,13 @@ public sealed class RaindropApiClient : IRaindropClient
         ValidateIds(validatedCollections.Select(item => item.Id).ToArray());
         foreach (var batch in validatedCollections.Chunk(BatchSize))
         {
+            await SendAsync(HttpMethod.Delete, "collections",
+                new { ids = batch.Select(item => item.Id).ToArray() }, "delete collections",
+                _ => true, cancellationToken, allowNoContent: true);
             foreach (var collection in batch)
             {
                 _logger.Info($"Removing folder \"{collection.Title}\" from Raindrop.");
             }
-
-            await SendAsync(HttpMethod.Delete, "collections",
-                new { ids = batch.Select(item => item.Id).ToArray() }, "delete collections",
-                _ => true, cancellationToken, allowNoContent: true);
         }
     }
 
@@ -190,14 +191,13 @@ public sealed class RaindropApiClient : IRaindropClient
         var seenIds = new HashSet<long>();
         foreach (var batch in validatedBookmarks.Chunk(BatchSize))
         {
-            foreach (var bookmark in batch)
-            {
-                _logger.Info($"Adding bookmark \"{bookmark.Title}\" to Raindrop.");
-            }
-
             var created = await SendAsync(HttpMethod.Post, "raindrops",
                 new { items = batch.Select(BookmarkBody).ToArray() }, "create bookmarks", root =>
                     ReadCreatedBookmarkBatch(root, batch.Length, seenIds), cancellationToken);
+            foreach (var bookmark in created)
+            {
+                _logger.Info($"Adding bookmark \"{bookmark.Title}\" to Raindrop.");
+            }
             yield return Array.AsReadOnly(created);
         }
     }
@@ -207,9 +207,10 @@ public sealed class RaindropApiClient : IRaindropClient
     {
         ValidatePositiveId(id);
         ValidateBookmark(bookmark);
-        _logger.Info($"Changing bookmark \"{bookmark.Title}\" in Raindrop.");
-        return SendAsync(HttpMethod.Put, $"raindrop/{IdText(id)}", BookmarkBody(bookmark), "update bookmark",
-            root => ReadUpdatedBookmark(root, id), cancellationToken);
+        return LogSuccessfulWriteAsync(
+            SendAsync(HttpMethod.Put, $"raindrop/{IdText(id)}", BookmarkBody(bookmark), "update bookmark",
+                root => ReadUpdatedBookmark(root, id), cancellationToken),
+            result => $"Changing bookmark \"{result.Title}\" in Raindrop.");
     }
 
     public async Task MoveBookmarksAsync(long sourceCollectionId, long targetCollectionId,
@@ -222,15 +223,14 @@ public sealed class RaindropApiClient : IRaindropClient
         ValidateIds(validatedBookmarks.Select(item => item.Id).ToArray());
         foreach (var batch in validatedBookmarks.Chunk(BatchSize))
         {
-            foreach (var bookmark in batch)
-            {
-                _logger.Info($"Changing bookmark \"{bookmark.Title}\" in Raindrop.");
-            }
-
             await SendAsync(HttpMethod.Put, $"raindrops/{IdText(sourceCollectionId)}",
                 new { ids = batch.Select(item => item.Id).ToArray(), collection = Reference(targetCollectionId) },
                 "move bookmarks",
                 root => ValidateMoveResponse(root, batch.Length), cancellationToken, allowNoContent: true);
+            foreach (var bookmark in batch)
+            {
+                _logger.Info($"Changing bookmark \"{bookmark.Title}\" in Raindrop.");
+            }
         }
     }
 
@@ -243,17 +243,23 @@ public sealed class RaindropApiClient : IRaindropClient
         ValidateIds(validatedBookmarks.Select(item => item.Id).ToArray());
         foreach (var batch in validatedBookmarks.Chunk(BatchSize))
         {
-            foreach (var bookmark in batch)
-            {
-                _logger.Info($"Removing bookmark \"{bookmark.Title}\" from Raindrop.");
-            }
-
             // Never DELETE /raindrop/{id}: repeating it after an uncertain result can permanently
             // delete an item already in Trash. Scope deletions to the original active collection.
             await SendAsync(HttpMethod.Delete, $"raindrops/{IdText(sourceCollectionId)}",
                 new { ids = batch.Select(item => item.Id).ToArray() }, "trash bookmarks", _ => true,
                 cancellationToken, allowNoContent: true);
+            foreach (var bookmark in batch)
+            {
+                _logger.Info($"Removing bookmark \"{bookmark.Title}\" from Raindrop.");
+            }
         }
+    }
+
+    private async Task<T> LogSuccessfulWriteAsync<T>(Task<T> write, Func<T, string> createMessage)
+    {
+        var result = await write;
+        _logger.Info(createMessage(result));
+        return result;
     }
 
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, string operation,

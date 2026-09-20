@@ -69,10 +69,43 @@ public sealed class RaindropClientContractTests
         var actual = await client.UpdateBookmarkAsync(42, new(-1, originalTitle, link));
         Assert.Equal(storedTitle, actual.Title);
         Assert.Equal(42, actual.Id);
-        Assert.Equal($"Changing bookmark \"{originalTitle}\" in Raindrop.", Assert.Single(logger.Information));
+        Assert.Equal($"Changing bookmark \"{storedTitle}\" in Raindrop.", Assert.Single(logger.Information));
         using var body = JsonDocument.Parse(Assert.Single(http.RequestBodies));
         Assert.Equal(originalTitle, body.RootElement.GetProperty("title").GetString());
         Assert.Equal(link, body.RootElement.GetProperty("link").GetString());
         Assert.Equal(new[] { "/rest/v1/raindrop/42" }, http.Paths);
+    }
+
+    [Fact]
+    public async Task Rejected_write_is_not_logged_as_a_change()
+    {
+        using var http = new ScriptedHttpClientFactory
+        {
+            RespondAsync = (_, _) => Task.FromResult(
+                ScriptedHttpClientFactory.JsonResponse("{}", System.Net.HttpStatusCode.BadRequest))
+        };
+        var logger = new TestLogger();
+        var client = new RaindropApiClient(http, new IntegrationTestConfiguration("offline-token"), logger);
+
+        await Assert.ThrowsAsync<RaindropApiException>(() =>
+            client.UpdateBookmarkAsync(42, new(-1, "unchanged", "https://example.com")));
+
+        Assert.Empty(logger.Information);
+    }
+
+    [Fact]
+    public async Task Pre_cancelled_write_is_not_logged_as_a_change()
+    {
+        using var http = new ScriptedHttpClientFactory();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var logger = new TestLogger();
+        var client = new RaindropApiClient(http, new IntegrationTestConfiguration("offline-token"), logger);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.CreateCollectionAsync(new("not-created"), cancellation.Token));
+
+        Assert.Empty(logger.Information);
+        Assert.Empty(http.Paths);
     }
 }
