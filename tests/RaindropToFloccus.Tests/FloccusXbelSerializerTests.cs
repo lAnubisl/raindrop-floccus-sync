@@ -21,6 +21,28 @@ public sealed class FloccusXbelSerializerTests
     }
 
     [Fact]
+    public void Serialize_uses_the_same_root_layout_as_Floccus()
+    {
+        var content = _serializer.Serialize(CreateDocument());
+
+        Assert.Equal(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE xbel PUBLIC "+//IDN python.org//DTD XML Bookmark Exchange Language 1.0//EN//XML" "http://pyxml.sourceforge.net/topics/dtds/xbel.dtd">
+            <xbel version="1.0">
+            <!--- highestId :2: for Floccus bookmark sync browser extension -->
+            <folder id="1">
+              <title>Unicode 🌧 folder</title>
+              <bookmark href="https://example.com/?a=1&amp;b=2" id="2">
+                <title>Example &amp; bookmark</title>
+              </bookmark>
+            </folder>
+            </xbel>
+            """,
+            content);
+    }
+
+    [Fact]
     public void Serialize_produces_a_document_that_round_trips_without_losing_values()
     {
         var expected = CreateDocument();

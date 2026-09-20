@@ -87,7 +87,7 @@ The rule applies to the whole entity. Field-level merges are not attempted.
 
 The planner also resolves structural dependencies. Required Git ancestor folders are restored when Raindrop deleted them. New Raindrop items inside a subtree deleted by Git are removed with that subtree. Moves that would create a cycle or exceed the maximum folder depth of 128 are resolved in favour of the Git structure; a new Raindrop subtree that is otherwise valid may be promoted to the root to stay within the limit.
 
-Planning and validation finish before the first write. If the logical XBEL contents do not change, the original bytes, formatting, and order are retained.
+Planning and validation finish before the first write. If the logical XBEL contents do not change, the original bytes, formatting, and order are retained. When contents change, unchanged siblings retain their source order and the regenerated document uses Floccus-compatible formatting so Git diffs remain focused on the affected items.
 
 ## Applying a plan
 
