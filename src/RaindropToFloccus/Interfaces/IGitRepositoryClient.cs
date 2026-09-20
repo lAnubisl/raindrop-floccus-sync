@@ -1,3 +1,5 @@
+using RaindropToFloccus.Models;
+
 namespace RaindropToFloccus.Interfaces;
 
 public interface IGitRepositoryClient
@@ -18,6 +20,8 @@ public interface IGitRepositoryClient
 
     Task<bool> PushSynchronizationFilesIfRemoteUnchangedAsync(
         string expectedRemoteRevision,
+        XbelDocument previousXbel,
+        XbelDocument currentXbel,
         CancellationToken cancellationToken = default);
 
     Task RestoreRemoteAfterRejectedSynchronizationPushAsync(

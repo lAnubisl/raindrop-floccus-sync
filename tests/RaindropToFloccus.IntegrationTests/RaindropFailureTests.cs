@@ -180,7 +180,7 @@ public sealed class RaindropFailureTests
             var client = Client(http);
             var error = await Assert.ThrowsAsync<RaindropApiException>(async () =>
             {
-                if (write) await client.TrashBookmarksAsync(-1, [1]);
+                if (write) await client.TrashBookmarksAsync(-1, [ExistingBookmark(1)]);
                 else await client.GetActiveBookmarksAsync();
             });
             Assert.False(error.IsTransient);
@@ -217,9 +217,9 @@ public sealed class RaindropFailureTests
             RespondAsync = (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent))
         };
         var client = Client(http);
-        await client.MoveBookmarksAsync(-1, 2, [1]);
-        await client.TrashBookmarksAsync(-1, [1]);
-        await client.DeleteCollectionsAsync([2]);
+        await client.MoveBookmarksAsync(-1, 2, [ExistingBookmark(1)]);
+        await client.TrashBookmarksAsync(-1, [ExistingBookmark(1)]);
+        await client.DeleteCollectionsAsync([ExistingCollection(2)]);
         Assert.Equal(3, http.Paths.Count);
     }
 

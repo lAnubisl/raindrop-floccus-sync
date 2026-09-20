@@ -32,7 +32,7 @@ public sealed class LiveAccountFixture : IAsyncLifetime
 
         Configuration = new();
         Factory = new LiveHttpClientFactory(Observer);
-        Client = new RaindropApiClient(Factory, Configuration);
+        Client = new RaindropApiClient(Factory, Configuration, new TestLogger());
         _originalCollections = (await ReadCollectionsRawAsync()).ToDictionary(Id, CollectionSnapshot);
         _originalBookmarks = (await ReadActiveRawAsync()).ToDictionary(Id, BookmarkSnapshot);
         _initialized = true;
