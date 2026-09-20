@@ -1,4 +1,5 @@
 using RaindropToFloccus.Interfaces;
+using RaindropToFloccus.Helpers;
 using RaindropToFloccus.Models;
 using ApplicationLogger = RaindropToFloccus.Interfaces.ILogger;
 
@@ -261,7 +262,9 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
                 journal = await WriteRaindropAsync(journal, "create collection", () => _raindrop.CreateCollectionAsync(
                     new RaindropCollectionWrite(desired.Title, parent), CancellationToken.None),
                     (currentJournal, result) =>
-                        AcceptCollection(currentJournal, result, mapping.StableId, null, parent, updateTarget: true), cancellationToken);
+                        AcceptCollection(currentJournal, result, mapping.StableId, null, parent, updateTarget: true),
+                    cancellationToken,
+                    () => SynchronizationItemLoggingHelper.Creating(_logger, "folder", desired.Title, "Raindrop"));
             }
             else
             {
@@ -289,7 +292,9 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
             {
                 journal = await WriteRaindropAsync(journal, "create bookmark", () => CreateBookmarkAsync(write),
                     (currentJournal, result) =>
-                        AcceptBookmark(currentJournal, result, mapping.StableId, null, collection), cancellationToken);
+                        AcceptBookmark(currentJournal, result, mapping.StableId, null, collection),
+                    cancellationToken,
+                    () => SynchronizationItemLoggingHelper.Creating(_logger, "bookmark", desired.Title, "Raindrop"));
             }
             else
             {
@@ -315,7 +320,7 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
             await VerifyRaindropAsync(journal, cancellationToken);
             if (journal.ExpectedBookmarks.Any(item => item.CollectionId == leaf.Id))
                 throw Recovery("A collection scheduled for deletion still contains retained bookmarks.");
-            journal = await DeleteCollectionAsync(journal, leaf.Id, cancellationToken);
+            journal = await DeleteCollectionAsync(journal, leaf, cancellationToken);
             deletedIds.Remove(leaf.Id);
         }
         return journal;
@@ -327,9 +332,10 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
             && !collections.Any(child => child.ParentId == item.Id));
 
     private Task<SynchronizationJournal> DeleteCollectionAsync(SynchronizationJournal journal,
-        long collectionId, CancellationToken cancellationToken) =>
-        WriteRaindropAsync(journal, "delete collection", collectionId, DeleteRaindropCollectionAsync,
-            AcceptDeletedCollection, cancellationToken);
+        RaindropCollection collection, CancellationToken cancellationToken) =>
+        WriteRaindropAsync(journal, "delete collection", collection.Id, DeleteRaindropCollectionAsync,
+            AcceptDeletedCollection, cancellationToken,
+            () => SynchronizationItemLoggingHelper.Deleting(_logger, "folder", collection.Title, "Raindrop"));
 
     private async Task<long> DeleteRaindropCollectionAsync(long collectionId)
     {
@@ -426,7 +432,14 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
     {
         var ids = batch.Select(item => item.Id).ToHashSet();
         return WriteRaindropAsync(journal, "trash bookmarks", (sourceCollectionId, ids),
-            TrashRaindropBookmarksAsync, AcceptTrashedBookmarks, cancellationToken);
+            TrashRaindropBookmarksAsync, AcceptTrashedBookmarks, cancellationToken, () =>
+            {
+                foreach (var bookmark in batch)
+                {
+                    SynchronizationItemLoggingHelper.Deleting(
+                        _logger, "bookmark", bookmark.Title, "Raindrop");
+                }
+            });
     }
 
     private async Task<HashSet<long>> TrashRaindropBookmarksAsync(
@@ -444,7 +457,7 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
 
     private async Task<SynchronizationJournal> WriteRaindropAsync<T>(SynchronizationJournal journal,
         string operation, Func<Task<T>> write, Func<SynchronizationJournal, T, SynchronizationJournal> accept,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Action? writeCompleted = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         journal = journal with { InFlightOperation = operation };
@@ -455,12 +468,14 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
         journal = accept(journal, result);
         journal = journal with { InFlightOperation = null, AppliedOperations = checked(journal.AppliedOperations + 1) };
         await _journals.SaveAsync(journal, CancellationToken.None);
+        writeCompleted?.Invoke();
         return journal;
     }
 
     private async Task<SynchronizationJournal> WriteRaindropAsync<T, TInput>(SynchronizationJournal journal,
         string operation, TInput input, Func<TInput, Task<T>> write,
-        Func<SynchronizationJournal, T, SynchronizationJournal> accept, CancellationToken cancellationToken)
+        Func<SynchronizationJournal, T, SynchronizationJournal> accept, CancellationToken cancellationToken,
+        Action? writeCompleted = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         journal = journal with { InFlightOperation = operation };
@@ -469,6 +484,7 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
         journal = accept(journal, result);
         journal = journal with { InFlightOperation = null, AppliedOperations = checked(journal.AppliedOperations + 1) };
         await _journals.SaveAsync(journal, CancellationToken.None);
+        writeCompleted?.Invoke();
         return journal;
     }
 
@@ -553,6 +569,8 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
         {
             return false;
         }
+        SynchronizationItemLoggingHelper.LogFloccusCreatesAndDeletes(
+            _logger, _xbel.Parse(journal.SourceXbelContent), journal.Plan);
         await _journals.DeleteAsync(cancellationToken);
         return true;
     }
