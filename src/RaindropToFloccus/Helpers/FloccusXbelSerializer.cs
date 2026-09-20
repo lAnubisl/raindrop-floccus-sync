@@ -16,6 +16,9 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
     private const string XbelSystemIdentifier = "http://pyxml.sourceforge.net/topics/dtds/xbel.dtd";
     private const string HighestIdCommentSuffix = "for Floccus bookmark sync browser extension";
     private const string FloccusXmlDeclaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+    private const string FloccusDocumentType =
+        "<!DOCTYPE xbel PUBLIC \"+//IDN python.org//DTD XML Bookmark Exchange Language 1.0//EN//XML\" "
+        + "\"http://pyxml.sourceforge.net/topics/dtds/xbel.dtd\">";
     private const long MaximumFloccusId = 9_007_199_254_740_991;
     private const int MaximumFolderDepth = 128;
 
@@ -42,27 +45,25 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
         ArgumentNullException.ThrowIfNull(document);
         Validate(document);
 
-        var root = new XElement(
-            "xbel",
-            new XAttribute("version", XbelVersion),
-            new XComment(
-                $"- highestId :{document.HighestId.ToString(CultureInfo.InvariantCulture)}: "
-                + HighestIdCommentSuffix));
-
+        var content = new StringBuilder();
+        content.Append(FloccusXmlDeclaration).Append('\n');
+        content.Append(FloccusDocumentType).Append('\n');
+        content.Append("<xbel version=\"1.0\">\n");
+        content.Append("<!--- highestId :")
+            .Append(document.HighestId.ToString(CultureInfo.InvariantCulture))
+            .Append(": ")
+            .Append(HighestIdCommentSuffix)
+            .Append(" -->\n");
         foreach (var item in document.Items)
         {
-            root.Add(SerializeItem(item));
+            content.Append(SerializeItemFragment(item)).Append('\n');
         }
+        content.Append("</xbel>");
+        return content.ToString();
+    }
 
-        var xmlDocument = new XDocument(
-            new XDeclaration("1.0", "UTF-8", null),
-            new XDocumentType(
-                "xbel",
-                XbelPublicIdentifier,
-                XbelSystemIdentifier,
-                internalSubset: null),
-            root);
-
+    private static string SerializeItemFragment(XbelItem item)
+    {
         using var stream = new MemoryStream();
         var settings = new XmlWriterSettings
         {
@@ -76,10 +77,10 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
 
         using (var writer = XmlWriter.Create(stream, settings))
         {
-            xmlDocument.Save(writer);
+            SerializeItem(item).Save(writer);
         }
 
-        return FloccusXmlDeclaration + "\n" + Encoding.UTF8.GetString(stream.ToArray());
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 
     private static XDocument ReadXmlDocument(string content)

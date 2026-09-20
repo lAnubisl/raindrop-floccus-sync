@@ -98,7 +98,9 @@ public sealed class GitPrioritySynchronizationPlanner : ISynchronizationPlanner
         var bookmarks = CreateBookmarkMappings(comparison, xbelTree.Bookmarks, ref highestId);
         var folderIds = folders.ToDictionary(item => item.StableId, item => item.XbelId);
         var bookmarkIds = bookmarks.ToDictionary(item => item.StableId, item => item.XbelId);
-        var content = _xbelSerializer.Serialize(new XbelDocument(highestId, BuildItems(xbelTree, folderIds, bookmarkIds, null)));
+        var sourceOrder = CreateSourceOrder(source.Items);
+        var content = _xbelSerializer.Serialize(new XbelDocument(highestId,
+            BuildItems(xbelTree, folderIds, bookmarkIds, sourceOrder, null)));
 
         ValidateBookmarkTitles(raindropTree.Bookmarks);
 
@@ -149,14 +151,32 @@ public sealed class GitPrioritySynchronizationPlanner : ISynchronizationPlanner
         return ++highestId;
     }
 
+    private static IReadOnlyDictionary<long, int> CreateSourceOrder(IReadOnlyList<XbelItem> items)
+    {
+        var order = new Dictionary<long, int>();
+        AddItems(items);
+        return order;
+
+        void AddItems(IEnumerable<XbelItem> sourceItems)
+        {
+            foreach (var item in sourceItems)
+            {
+                order.Add(item.Id, order.Count);
+                if (item is XbelFolder folder) AddItems(folder.Children);
+            }
+        }
+    }
+
     private static IReadOnlyList<XbelItem> BuildItems(BookmarkTree tree,
         IReadOnlyDictionary<StableFolderId, long> folderIds,
-        IReadOnlyDictionary<StableBookmarkId, long> bookmarkIds, StableFolderId? parent)
+        IReadOnlyDictionary<StableBookmarkId, long> bookmarkIds,
+        IReadOnlyDictionary<long, int> sourceOrder,
+        StableFolderId? parent)
     {
         var items = new List<XbelItem>();
         foreach (var folder in tree.Folders.Where(item => item.ParentId == parent))
         {
-            items.Add(CreateXbelFolder(folder, tree, folderIds, bookmarkIds));
+            items.Add(CreateXbelFolder(folder, tree, folderIds, bookmarkIds, sourceOrder));
         }
 
         foreach (var bookmark in tree.Bookmarks.Where(item => item.ParentId == parent))
@@ -164,13 +184,17 @@ public sealed class GitPrioritySynchronizationPlanner : ISynchronizationPlanner
             items.Add(CreateXbelBookmark(bookmark, bookmarkIds));
         }
 
-        return items.OrderBy(item => item.Id).ToArray();
+        return items.OrderBy(item => sourceOrder.GetValueOrDefault(item.Id, int.MaxValue))
+            .ThenBy(item => item.Id)
+            .ToArray();
     }
 
     private static XbelFolder CreateXbelFolder(BookmarkTreeFolder folder, BookmarkTree tree,
         IReadOnlyDictionary<StableFolderId, long> folderIds,
-        IReadOnlyDictionary<StableBookmarkId, long> bookmarkIds) =>
-        new(folderIds[folder.Id], folder.Title, BuildItems(tree, folderIds, bookmarkIds, folder.Id));
+        IReadOnlyDictionary<StableBookmarkId, long> bookmarkIds,
+        IReadOnlyDictionary<long, int> sourceOrder) =>
+        new(folderIds[folder.Id], folder.Title,
+            BuildItems(tree, folderIds, bookmarkIds, sourceOrder, folder.Id));
 
     private static XbelBookmark CreateXbelBookmark(BookmarkTreeBookmark bookmark,
         IReadOnlyDictionary<StableBookmarkId, long> bookmarkIds) =>
