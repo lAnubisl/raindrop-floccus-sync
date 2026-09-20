@@ -14,7 +14,8 @@ public sealed class RaindropClientContractTests
         using var http = new ScriptedHttpClientFactory(
             """{"result":true,"items":[{"_id":1,"title":"root"},{"_id":2,"title":"child","parent":{"$id":1}}]}""",
             """{"result":true,"items":[{"_id":1,"title":"root","parent":null},{"_id":2,"title":"child","parent":{"$id":1}}]}""");
-        var client = new RaindropApiClient(http, new IntegrationTestConfiguration("offline-token"));
+        var client = new RaindropApiClient(
+            http, new IntegrationTestConfiguration("offline-token"), new TestLogger());
         var actual = await client.GetCollectionsAsync();
         Assert.Equal(new[] { new RaindropCollection(1, null, "root"), new RaindropCollection(2, 1, "child") }, actual);
         Assert.Equal(new[] { "/rest/v1/collections", "/rest/v1/collections/childrens" }, http.Paths);
@@ -32,7 +33,8 @@ public sealed class RaindropClientContractTests
         });
         using var http = new ScriptedHttpClientFactory(
             """{"result":true,"items":[{"_id":2,"title":"child","parent":{"$id":1}}]}""", second);
-        var client = new RaindropApiClient(http, new IntegrationTestConfiguration("offline-token"));
+        var client = new RaindropApiClient(
+            http, new IntegrationTestConfiguration("offline-token"), new TestLogger());
         var error = await Assert.ThrowsAsync<RaindropApiException>(() => client.GetCollectionsAsync());
         Assert.True(error.IsTransient);
         Assert.False(error.OutcomeMayBeUnknown);
@@ -45,7 +47,8 @@ public sealed class RaindropClientContractTests
         using var http = new ScriptedHttpClientFactory(
             """{"result":true,"items":[{"_id":1,"title":"root"},{"_id":2,"title":"same","parent":{"$id":1}}]}""",
             """{"result":true,"items":[{"_id":2,"title":"same","parent":{"$id":1}},{"_id":3,"title":"same","parent":{"$id":1}}]}""");
-        var client = new RaindropApiClient(http, new IntegrationTestConfiguration("offline-token"));
+        var client = new RaindropApiClient(
+            http, new IntegrationTestConfiguration("offline-token"), new TestLogger());
         var actual = await client.GetCollectionsAsync();
         Assert.Equal(new long[] { 1, 2, 3 }, actual.Select(item => item.Id));
         Assert.Equal(2, actual.Count(item => item.Title == "same" && item.ParentId == 1));
@@ -64,7 +67,8 @@ public sealed class RaindropClientContractTests
             item = new { _id = 42, title = storedTitle, link, collection = new Dictionary<string, long> { ["$id"] = -1 } }
         });
         using var http = new ScriptedHttpClientFactory(response);
-        var client = new RaindropApiClient(http, new IntegrationTestConfiguration("offline-token"));
+        var client = new RaindropApiClient(
+            http, new IntegrationTestConfiguration("offline-token"), new TestLogger());
         var actual = await client.UpdateBookmarkAsync(42, new(-1, originalTitle, link));
         Assert.Equal(storedTitle, actual.Title);
         Assert.Equal(42, actual.Id);
@@ -72,5 +76,49 @@ public sealed class RaindropClientContractTests
         Assert.Equal(originalTitle, body.RootElement.GetProperty("title").GetString());
         Assert.Equal(link, body.RootElement.GetProperty("link").GetString());
         Assert.Equal(new[] { "/rest/v1/raindrop/42" }, http.Paths);
+    }
+
+    [Fact]
+    public async Task Create_and_delete_logs_are_written_before_each_remote_request()
+    {
+        var logger = new TestLogger();
+        var expectedMessages = new[]
+        {
+            "Creating folder \"My Folder Name\" in Raindrop.",
+            "Creating bookmark \"My Bookmark Name\" in Raindrop.",
+            "Deleting bookmark \"My Bookmark Name\" from Raindrop.",
+            "Deleting folder \"My Folder Name\" from Raindrop."
+        };
+        var request = 0;
+        using var http = new ScriptedHttpClientFactory
+        {
+            RespondAsync = (_, _) =>
+            {
+                request++;
+                Assert.Equal(expectedMessages.Take(request), logger.InformationMessages);
+                var response = request switch
+                {
+                    1 => """{"result":true,"item":{"_id":10,"title":"My Folder Name"}}""",
+                    2 => """{"result":true,"items":[{"_id":20,"title":"My Bookmark Name","link":"https://example.com/item","collection":{"$id":10}}]}""",
+                    _ => """{"result":true}"""
+                };
+                return Task.FromResult(ScriptedHttpClientFactory.JsonResponse(response));
+            }
+        };
+        var client = new RaindropApiClient(
+            http, new IntegrationTestConfiguration("offline-token"), logger);
+
+        var folder = await client.CreateCollectionAsync(new("My Folder Name"));
+        RaindropBookmark? bookmark = null;
+        await foreach (var batch in client.CreateBookmarksAsync(
+                           [new RaindropBookmarkWrite(folder.Id, "My Bookmark Name", "https://example.com/item")]))
+        {
+            bookmark = Assert.Single(batch);
+        }
+        await client.TrashBookmarksAsync(folder.Id, [Assert.IsType<RaindropBookmark>(bookmark)]);
+        await client.DeleteCollectionsAsync([folder]);
+
+        Assert.Equal(expectedMessages, logger.InformationMessages);
+        Assert.Equal(4, request);
     }
 }

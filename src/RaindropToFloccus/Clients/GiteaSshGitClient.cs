@@ -8,15 +8,17 @@ namespace RaindropToFloccus.Clients;
 public sealed class GiteaSshGitClient : IGitRepositoryClient
 {
     private const string BranchName = "main";
+    private const string XbelFileName = "bookmarks.xbel";
     private static readonly string[] SynchronizationFiles =
     [
-        "bookmarks.xbel",
+        XbelFileName,
         ".raindrop-sync/state.json"
     ];
 
     private readonly ApplicationConfigurationProvider _configurationProvider;
     private readonly ICommandRunner _commandRunner;
     private readonly IGitSshEnvironmentProvider _sshEnvironmentProvider;
+    private readonly IXbelDocumentSerializer _xbelSerializer;
     private readonly ApplicationLogger _logger;
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private bool _initialized;
@@ -25,11 +27,13 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
         ApplicationConfigurationProvider configurationProvider,
         ICommandRunner commandRunner,
         IGitSshEnvironmentProvider sshEnvironmentProvider,
+        IXbelDocumentSerializer xbelSerializer,
         ApplicationLogger logger)
     {
         _configurationProvider = configurationProvider;
         _commandRunner = commandRunner;
         _sshEnvironmentProvider = sshEnvironmentProvider;
+        _xbelSerializer = xbelSerializer;
         _logger = logger;
     }
 
@@ -180,13 +184,17 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
         try
         {
             await InitializeCoreAsync(cancellationToken);
+            var currentXbel = await ReadXbelAtRevisionAsync(expectedRemoteRevision, cancellationToken);
+            var desiredXbel = await ReadXbelAtRevisionAsync("HEAD", cancellationToken);
             _logger.Info("Pushing synchronization changes with a Git revision lease.");
             var push = await RunGitAllowingExitCodesAsync(
                 "push synchronization files with revision lease",
                 ["push", "--porcelain", $"--force-with-lease=refs/heads/{BranchName}:{expectedRemoteRevision}",
                     "origin", $"{BranchName}:{BranchName}"],
                 [0, 1],
-                cancellationToken);
+                cancellationToken,
+                () => ClientItemOperationLoggingHelper.LogFloccusChanges(
+                    _logger, currentXbel, desiredXbel));
             if (push.ExitCode == 0)
             {
                 return true;
@@ -391,6 +399,14 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
         return result.StandardOutput.Trim();
     }
 
+    private async Task<XbelDocument> ReadXbelAtRevisionAsync(
+        string revision, CancellationToken cancellationToken)
+    {
+        var result = await RunGitAsync(
+            "read XBEL revision", ["show", $"{revision}:{XbelFileName}"], cancellationToken);
+        return _xbelSerializer.Parse(result.StandardOutput);
+    }
+
     private async Task<string> GetCurrentRevisionCoreAsync(CancellationToken cancellationToken)
     {
         var result = await RunGitAsync("read HEAD", ["rev-parse", "HEAD"], cancellationToken);
@@ -409,7 +425,8 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
         string operation,
         IReadOnlyList<string> arguments,
         IReadOnlyList<int> allowedExitCodes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action? commandStarting = null)
     {
         var sshEnvironment = await _sshEnvironmentProvider.GetEnvironmentAsync(cancellationToken);
         return await RunCommandAsync(
@@ -418,7 +435,8 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
             WorkingDirectory,
             sshEnvironment,
             allowedExitCodes,
-            cancellationToken);
+            cancellationToken,
+            commandStarting);
     }
 
     private async Task<CommandResult> RunCommandAsync(
@@ -427,8 +445,10 @@ public sealed class GiteaSshGitClient : IGitRepositoryClient
         string? workingDirectory,
         IReadOnlyDictionary<string, string?> environment,
         IReadOnlyList<int> allowedExitCodes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action? commandStarting = null)
     {
+        commandStarting?.Invoke();
         var result = await _commandRunner.RunAsync(
             new CommandSpec("git", arguments, workingDirectory, environment),
             cancellationToken);

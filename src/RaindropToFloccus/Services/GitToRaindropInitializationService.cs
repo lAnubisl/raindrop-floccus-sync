@@ -245,19 +245,18 @@ public sealed class GitToRaindropInitializationService : IInitialSynchronization
             cancellationToken.ThrowIfCancellationRequested();
             await _raindropClient.TrashBookmarksAsync(
                 group.Key,
-                group.Select(bookmark => bookmark.Id).ToArray(),
+                group.ToArray(),
                 cancellationToken);
         }
 
         if (collections.Count > 0)
         {
             var depths = GetCollectionDepths(collections);
-            var collectionIds = collections
+            var deletedCollections = collections
                 .OrderByDescending(collection => depths[collection.Id])
                 .ThenBy(collection => collection.Id)
-                .Select(collection => collection.Id)
                 .ToArray();
-            await _raindropClient.DeleteCollectionsAsync(collectionIds, cancellationToken);
+            await _raindropClient.DeleteCollectionsAsync(deletedCollections, cancellationToken);
         }
 
         var remainingBookmarks = await _raindropClient.GetActiveBookmarksAsync(cancellationToken);

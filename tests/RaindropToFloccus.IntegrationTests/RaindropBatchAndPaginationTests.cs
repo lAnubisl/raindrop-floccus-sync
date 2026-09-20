@@ -118,8 +118,8 @@ public sealed class RaindropBatchAndPaginationTests
         var error = await Assert.ThrowsAsync<RaindropApiException>(async () =>
         {
             if (operation == "move") await client.MoveBookmarksAsync(-1, 2, ids);
-            else if (operation == "trash") await client.TrashBookmarksAsync(-1, ids);
-            else await client.DeleteCollectionsAsync(ids);
+            else if (operation == "trash") await client.TrashBookmarksAsync(-1, Bookmarks(ids));
+            else await client.DeleteCollectionsAsync(Collections(ids));
         });
         Assert.True(error.OutcomeMayBeUnknown);
         Assert.Equal(2, calls);
@@ -172,7 +172,7 @@ public sealed class RaindropBatchAndPaginationTests
     public async Task Repeated_scoped_trash_accepts_zero_modified_without_permanent_deletion()
     {
         using var http = new ScriptedHttpClientFactory("{\"result\":true,\"modified\":0}");
-        await Client(http).TrashBookmarksAsync(-1, [1]);
+        await Client(http).TrashBookmarksAsync(-1, Bookmarks([1]));
         Assert.Equal(new[] { "/rest/v1/raindrops/-1" }, http.Paths);
         Assert.Equal(new[] { "DELETE" }, http.Methods);
         using var request = JsonDocument.Parse(Assert.Single(http.RequestBodies));
