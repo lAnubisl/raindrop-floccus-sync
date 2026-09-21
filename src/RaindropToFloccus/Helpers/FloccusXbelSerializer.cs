@@ -67,7 +67,7 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
 
         using (var writer = XmlWriter.Create(content, settings))
         {
-            SerializeItem(item).Save(writer);
+            SerializeItem(writer, item);
         }
 
         return content.ToString();
@@ -427,23 +427,67 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
         }
     }
 
-    private static XElement SerializeItem(XbelItem item)
+    private static void SerializeItem(XmlWriter writer, XbelItem item)
     {
-        return item switch
+        switch (item)
         {
-            XbelBookmark bookmark => new XElement(
-                "bookmark",
-                new XAttribute("href", bookmark.Url),
-                new XAttribute("id", bookmark.Id.ToString(CultureInfo.InvariantCulture)),
-                new XElement("title", bookmark.Title)),
-            XbelFolder folder => new XElement(
-                "folder",
-                new XAttribute("id", folder.Id.ToString(CultureInfo.InvariantCulture)),
-                new XElement("title", folder.Title),
-                folder.Children.Select(SerializeItem)),
-            _ => throw new XbelFormatException(
-                $"XBEL item {item.Id} has unsupported type '{item.GetType().Name}'.")
-        };
+            case XbelBookmark bookmark:
+                writer.WriteStartElement("bookmark");
+                writer.WriteStartAttribute("href");
+                WriteFloccusString(writer, bookmark.Url);
+                writer.WriteEndAttribute();
+                writer.WriteAttributeString("id", bookmark.Id.ToString(CultureInfo.InvariantCulture));
+                WriteTitle(writer, bookmark.Title);
+                writer.WriteEndElement();
+                break;
+            case XbelFolder folder:
+                writer.WriteStartElement("folder");
+                writer.WriteAttributeString("id", folder.Id.ToString(CultureInfo.InvariantCulture));
+                WriteTitle(writer, folder.Title);
+                foreach (var child in folder.Children)
+                {
+                    SerializeItem(writer, child);
+                }
+                writer.WriteEndElement();
+                break;
+            default:
+                throw new XbelFormatException(
+                    $"XBEL item {item.Id} has unsupported type '{item.GetType().Name}'.");
+        }
+    }
+
+    private static void WriteTitle(XmlWriter writer, string title)
+    {
+        writer.WriteStartElement("title");
+        WriteFloccusString(writer, title);
+        writer.WriteFullEndElement();
+    }
+
+    private static void WriteFloccusString(XmlWriter writer, string value)
+    {
+        var segmentStart = 0;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var entityName = value[index] switch
+            {
+                '\'' => "apos",
+                '"' => "quot",
+                _ => null
+            };
+            if (entityName is null)
+            {
+                continue;
+            }
+
+            if (index > segmentStart)
+            {
+                writer.WriteString(value[segmentStart..index]);
+            }
+            writer.WriteEntityRef(entityName);
+            segmentStart = index + 1;
+        }
+
+        writer.WriteString(value[segmentStart..]);
     }
 
     private static bool IsWhitespace(XNode node)

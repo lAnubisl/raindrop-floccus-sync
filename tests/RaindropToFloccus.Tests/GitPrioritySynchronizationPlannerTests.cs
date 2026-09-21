@@ -70,7 +70,7 @@ public sealed class GitPrioritySynchronizationPlannerTests
               <title>Folder</title>
             </folder>
             </xbel>
-            """,
+            """.ReplaceLineEndings("\n"),
             plan.XbelContent);
     }
 }
