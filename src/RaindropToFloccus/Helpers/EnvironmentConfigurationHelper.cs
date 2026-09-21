@@ -1,9 +1,3 @@
-using System.Globalization;
-using System.Net.Mail;
-using System.Text.RegularExpressions;
-using RaindropToFloccus.Models;
-using ApplicationConfigurationProvider = RaindropToFloccus.Interfaces.IConfigurationProvider;
-
 namespace RaindropToFloccus.Helpers;
 
 public sealed partial class EnvironmentConfigurationHelper : ApplicationConfigurationProvider

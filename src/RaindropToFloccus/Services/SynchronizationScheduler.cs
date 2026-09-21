@@ -1,8 +1,3 @@
-using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Models;
-using ApplicationConfigurationProvider = RaindropToFloccus.Interfaces.IConfigurationProvider;
-using ApplicationLogger = RaindropToFloccus.Interfaces.ILogger;
-
 namespace RaindropToFloccus.Services;
 
 public sealed class SynchronizationScheduler : ISynchronizationScheduler

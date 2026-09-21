@@ -1,8 +1,3 @@
-using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Models;
-using ApplicationConfigurationProvider = RaindropToFloccus.Interfaces.IConfigurationProvider;
-using ApplicationLogger = RaindropToFloccus.Interfaces.ILogger;
-
 namespace RaindropToFloccus.Clients;
 
 public sealed class GiteaSshGitClient : IGitRepositoryClient

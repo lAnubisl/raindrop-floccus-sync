@@ -1,7 +1,3 @@
-using System.Collections.ObjectModel;
-using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Models;
-
 namespace RaindropToFloccus.Services;
 
 public sealed class ThreeWaySynchronizationComparer : ISynchronizationComparer
@@ -110,14 +106,31 @@ public sealed class ThreeWaySynchronizationComparer : ISynchronizationComparer
             mapping => mapping.RaindropCollectionId, mapping => mapping.StableId);
         var knownBookmarks = state.BookmarkMappings.ToDictionary(
             mapping => mapping.RaindropBookmarkId, mapping => mapping.StableId);
+
         // Allocate all current folder identities first, so input order has no structural meaning.
-        var currentFolderIds = ResolveFolderIdentities(collections, knownFolders, usedIds);
-        var folders = CreateRaindropFolders(collections, currentFolderIds);
+        var currentFolderIds = new Dictionary<long, StableFolderId>();
+        foreach (var collection in collections)
+        {
+            var id = knownFolders.TryGetValue(collection.Id, out var knownId)
+                ? knownId : new StableFolderId(CreateStableId(usedIds));
+            currentFolderIds.Add(collection.Id, id);
+        }
+
+        var folders = new List<BookmarkTreeFolder>();
+        foreach (var collection in collections)
+        {
+            folders.Add(new BookmarkTreeFolder(
+                currentFolderIds[collection.Id],
+                collection.ParentId is { } parentId ? currentFolderIds[parentId] : null,
+                collection.Title));
+        }
+
         var bookmarks = new List<BookmarkTreeBookmark>();
         var bookmarkSourceIds = new Dictionary<StableBookmarkId, long>();
         foreach (var bookmark in sourceBookmarks)
         {
-            var id = ResolveBookmarkIdentity(bookmark, knownBookmarks, usedIds);
+            var id = knownBookmarks.TryGetValue(bookmark.Id, out var knownId)
+                ? knownId : new StableBookmarkId(CreateStableId(usedIds));
             bookmarkSourceIds.Add(id, bookmark.Id);
             bookmarks.Add(new BookmarkTreeBookmark(
                 id,
@@ -130,49 +143,6 @@ public sealed class ThreeWaySynchronizationComparer : ISynchronizationComparer
             folders, bookmarks,
             currentFolderIds.ToDictionary(pair => pair.Value, pair => pair.Key), bookmarkSourceIds);
     }
-
-    private static Dictionary<long, StableFolderId> ResolveFolderIdentities(
-        IEnumerable<RaindropCollection> collections,
-        IReadOnlyDictionary<long, StableFolderId> knownFolders,
-        ISet<Guid> usedIds)
-    {
-        var identities = new Dictionary<long, StableFolderId>();
-        foreach (var collection in collections)
-        {
-            identities.Add(collection.Id, ResolveFolderIdentity(collection, knownFolders, usedIds));
-        }
-
-        return identities;
-    }
-
-    private static StableFolderId ResolveFolderIdentity(RaindropCollection collection,
-        IReadOnlyDictionary<long, StableFolderId> knownFolders, ISet<Guid> usedIds) =>
-        knownFolders.TryGetValue(collection.Id, out var id)
-            ? id : new StableFolderId(CreateStableId(usedIds));
-
-    private static List<BookmarkTreeFolder> CreateRaindropFolders(
-        IEnumerable<RaindropCollection> collections,
-        IReadOnlyDictionary<long, StableFolderId> folderIds)
-    {
-        var folders = new List<BookmarkTreeFolder>();
-        foreach (var collection in collections)
-        {
-            folders.Add(CreateRaindropFolder(collection, folderIds));
-        }
-
-        return folders;
-    }
-
-    private static BookmarkTreeFolder CreateRaindropFolder(RaindropCollection collection,
-        IReadOnlyDictionary<long, StableFolderId> folderIds) =>
-        new(folderIds[collection.Id],
-            collection.ParentId is { } parentId ? folderIds[parentId] : null,
-            collection.Title);
-
-    private static StableBookmarkId ResolveBookmarkIdentity(RaindropBookmark bookmark,
-        IReadOnlyDictionary<long, StableBookmarkId> knownBookmarks, ISet<Guid> usedIds) =>
-        knownBookmarks.TryGetValue(bookmark.Id, out var id)
-            ? id : new StableBookmarkId(CreateStableId(usedIds));
 
     private static SourceBookmarkTree CreateSourceTree(
         List<BookmarkTreeFolder> folders,

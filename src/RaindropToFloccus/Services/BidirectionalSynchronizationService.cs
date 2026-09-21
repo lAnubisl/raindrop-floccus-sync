@@ -1,7 +1,3 @@
-using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Models;
-using ApplicationLogger = RaindropToFloccus.Interfaces.ILogger;
-
 namespace RaindropToFloccus.Services;
 
 public sealed class BidirectionalSynchronizationService : ISynchronizationService
@@ -422,11 +418,9 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
     }
 
     private Task<SynchronizationJournal> TrashBookmarkBatchAsync(SynchronizationJournal journal,
-        long sourceCollectionId, IReadOnlyList<RaindropBookmark> batch, CancellationToken cancellationToken)
-    {
-        return WriteRaindropAsync(journal, "trash bookmarks", (sourceCollectionId, batch),
+        long sourceCollectionId, IReadOnlyList<RaindropBookmark> batch, CancellationToken cancellationToken) =>
+        WriteRaindropAsync(journal, "trash bookmarks", (sourceCollectionId, batch),
             TrashRaindropBookmarksAsync, AcceptTrashedBookmarks, cancellationToken);
-    }
 
     private async Task<HashSet<long>> TrashRaindropBookmarksAsync(
         (long SourceCollectionId, IReadOnlyList<RaindropBookmark> Bookmarks) batch)
@@ -457,19 +451,10 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
         return journal;
     }
 
-    private async Task<SynchronizationJournal> WriteRaindropAsync<T, TInput>(SynchronizationJournal journal,
+    private Task<SynchronizationJournal> WriteRaindropAsync<T, TInput>(SynchronizationJournal journal,
         string operation, TInput input, Func<TInput, Task<T>> write,
-        Func<SynchronizationJournal, T, SynchronizationJournal> accept, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        journal = journal with { InFlightOperation = operation };
-        await _journals.SaveAsync(journal, cancellationToken);
-        var result = await write(input);
-        journal = accept(journal, result);
-        journal = journal with { InFlightOperation = null, AppliedOperations = checked(journal.AppliedOperations + 1) };
-        await _journals.SaveAsync(journal, CancellationToken.None);
-        return journal;
-    }
+        Func<SynchronizationJournal, T, SynchronizationJournal> accept, CancellationToken cancellationToken) =>
+        WriteRaindropAsync(journal, operation, () => write(input), accept, cancellationToken);
 
     private async Task<RaindropBookmark> CreateBookmarkAsync(RaindropBookmarkWrite write)
     {
@@ -483,12 +468,11 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
         return result ?? throw Recovery("Bookmark creation did not return a confirmed ID.");
     }
 
-    private async Task<bool> SourceMatchesJournalAsync(SynchronizationJournal journal, CancellationToken cancellationToken)
-    {
-        return await _git.GetCurrentRevisionAsync(cancellationToken) == journal.BaseRevision
+    private async Task<bool> SourceMatchesJournalAsync(SynchronizationJournal journal,
+        CancellationToken cancellationToken) =>
+        await _git.GetCurrentRevisionAsync(cancellationToken) == journal.BaseRevision
             && await _files.ReadXbelAsync(cancellationToken) == journal.SourceXbelContent
             && await _files.ReadStateIfExistsAsync(cancellationToken) == journal.BaseStateContent;
-    }
 
     private async Task<bool> FilesAreCompatibleWithFinalizationAsync(SynchronizationJournal journal,
         CancellationToken cancellationToken)
@@ -515,11 +499,9 @@ public sealed class BidirectionalSynchronizationService : ISynchronizationServic
     }
 
     private async Task<bool> SourceMatchesJournalAfterRefreshAsync(SynchronizationJournal journal,
-        CancellationToken cancellationToken)
-    {
-        return await _git.RefreshAsync(cancellationToken)
+        CancellationToken cancellationToken) =>
+        await _git.RefreshAsync(cancellationToken)
             && await SourceMatchesJournalAsync(journal, cancellationToken);
-    }
 
     private async Task VerifyRaindropAsync(SynchronizationJournal journal, CancellationToken cancellationToken)
     {
