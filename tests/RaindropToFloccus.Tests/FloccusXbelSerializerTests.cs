@@ -38,7 +38,7 @@ public sealed class FloccusXbelSerializerTests
               </bookmark>
             </folder>
             </xbel>
-            """,
+            """.ReplaceLineEndings("\n"),
             content);
     }
 
@@ -56,6 +56,34 @@ public sealed class FloccusXbelSerializerTests
         Assert.Equal(2, bookmark.Id);
         Assert.Equal("Example & bookmark", bookmark.Title);
         Assert.Equal("https://example.com/?a=1&b=2", bookmark.Url);
+    }
+
+    [Fact]
+    public void Serialize_uses_Floccus_entities_for_quotes_and_apostrophes()
+    {
+        var document = new XbelDocument(
+            HighestId: 1,
+            Items:
+            [
+                new XbelBookmark(
+                    1,
+                    "Title with 'apostrophe' and \"quotes\"",
+                    "https://example.com/?single='value'&double=\"value\"")
+            ]);
+
+        var content = _serializer.Serialize(document);
+
+        Assert.Contains(
+            "href=\"https://example.com/?single=&apos;value&apos;&amp;double=&quot;value&quot;\"",
+            content,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<title>Title with &apos;apostrophe&apos; and &quot;quotes&quot;</title>",
+            content,
+            StringComparison.Ordinal);
+
+        var bookmark = Assert.IsType<XbelBookmark>(Assert.Single(_serializer.Parse(content).Items));
+        Assert.Equal(document.Items[0], bookmark);
     }
 
     private static XbelDocument CreateDocument() => new(
