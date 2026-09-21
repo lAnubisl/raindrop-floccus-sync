@@ -1,5 +1,3 @@
-using System.Net;
-
 namespace RaindropToFloccus.Models;
 
 public sealed class RaindropApiException : Exception

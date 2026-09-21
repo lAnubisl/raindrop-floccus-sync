@@ -1,5 +1,3 @@
-using RaindropToFloccus.Interfaces;
-
 namespace RaindropToFloccus.Services;
 
 public sealed class Worker : BackgroundService
@@ -16,4 +14,3 @@ public sealed class Worker : BackgroundService
         return _synchronizationScheduler.RunAsync(stoppingToken);
     }
 }
-

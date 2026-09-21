@@ -1,6 +1,3 @@
-using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Models;
-
 namespace RaindropToFloccus.Services;
 
 public sealed class GitPrioritySynchronizationPlanner : ISynchronizationPlanner
@@ -102,7 +99,11 @@ public sealed class GitPrioritySynchronizationPlanner : ISynchronizationPlanner
         var content = _xbelSerializer.Serialize(new XbelDocument(highestId,
             BuildItems(xbelTree, folderIds, bookmarkIds, sourceOrder, null)));
 
-        ValidateBookmarkTitles(raindropTree.Bookmarks);
+        if (raindropTree.Bookmarks.Any(bookmark => bookmark.Title.Length > 1000))
+        {
+            throw new XbelFormatException(
+                "A planned bookmark title exceeds the Raindrop limit of 1000 characters.");
+        }
 
         return new SynchronizationPlan(
             xbelTree,
@@ -176,37 +177,20 @@ public sealed class GitPrioritySynchronizationPlanner : ISynchronizationPlanner
         var items = new List<XbelItem>();
         foreach (var folder in tree.Folders.Where(item => item.ParentId == parent))
         {
-            items.Add(CreateXbelFolder(folder, tree, folderIds, bookmarkIds, sourceOrder));
+            items.Add(new XbelFolder(
+                folderIds[folder.Id],
+                folder.Title,
+                BuildItems(tree, folderIds, bookmarkIds, sourceOrder, folder.Id)));
         }
 
         foreach (var bookmark in tree.Bookmarks.Where(item => item.ParentId == parent))
         {
-            items.Add(CreateXbelBookmark(bookmark, bookmarkIds));
+            items.Add(new XbelBookmark(bookmarkIds[bookmark.Id], bookmark.Title, bookmark.Url));
         }
 
         return items.OrderBy(item => sourceOrder.GetValueOrDefault(item.Id, int.MaxValue))
             .ThenBy(item => item.Id)
             .ToArray();
-    }
-
-    private static XbelFolder CreateXbelFolder(BookmarkTreeFolder folder, BookmarkTree tree,
-        IReadOnlyDictionary<StableFolderId, long> folderIds,
-        IReadOnlyDictionary<StableBookmarkId, long> bookmarkIds,
-        IReadOnlyDictionary<long, int> sourceOrder) =>
-        new(folderIds[folder.Id], folder.Title,
-            BuildItems(tree, folderIds, bookmarkIds, sourceOrder, folder.Id));
-
-    private static XbelBookmark CreateXbelBookmark(BookmarkTreeBookmark bookmark,
-        IReadOnlyDictionary<StableBookmarkId, long> bookmarkIds) =>
-        new(bookmarkIds[bookmark.Id], bookmark.Title, bookmark.Url);
-
-    private static void ValidateBookmarkTitles(IEnumerable<BookmarkTreeBookmark> bookmarks)
-    {
-        foreach (var bookmark in bookmarks)
-        {
-            if (bookmark.Title.Length > 1000)
-                throw new XbelFormatException("A planned bookmark title exceeds the Raindrop limit of 1000 characters.");
-        }
     }
 
     private static bool ResolveMissingFolderParents(

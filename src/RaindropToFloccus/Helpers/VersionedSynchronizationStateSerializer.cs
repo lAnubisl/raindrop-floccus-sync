@@ -1,8 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Models;
-
 namespace RaindropToFloccus.Helpers;
 
 public sealed class VersionedSynchronizationStateSerializer : ISynchronizationStateSerializer

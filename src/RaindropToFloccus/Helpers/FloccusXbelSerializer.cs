@@ -1,11 +1,3 @@
-using System.Globalization;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Xml;
-using System.Xml.Linq;
-using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Models;
-
 namespace RaindropToFloccus.Helpers;
 
 public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
@@ -42,7 +34,6 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
 
     public string Serialize(XbelDocument document)
     {
-        ArgumentNullException.ThrowIfNull(document);
         Validate(document);
 
         var content = new StringBuilder();
@@ -64,10 +55,9 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
 
     private static string SerializeItemFragment(XbelItem item)
     {
-        using var stream = new MemoryStream();
+        var content = new StringBuilder();
         var settings = new XmlWriterSettings
         {
-            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
             Indent = true,
             IndentChars = "  ",
             NewLineChars = "\n",
@@ -75,12 +65,12 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
             OmitXmlDeclaration = true
         };
 
-        using (var writer = XmlWriter.Create(stream, settings))
+        using (var writer = XmlWriter.Create(content, settings))
         {
             SerializeItem(item).Save(writer);
         }
 
-        return Encoding.UTF8.GetString(stream.ToArray());
+        return content.ToString();
     }
 
     private static XDocument ReadXmlDocument(string content)
@@ -118,7 +108,11 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
 
         var root = xmlDocument.Root
             ?? throw new XbelFormatException("The XBEL document does not contain a root element.");
-        ValidateElementName(root, "xbel");
+        if (root.Name != XName.Get("xbel"))
+        {
+            throw CreateFormatException(root, "Expected the xbel element.");
+        }
+
         ValidateAttributes(root, ["version"]);
         if (!string.Equals(root.Attribute("version")?.Value, XbelVersion, StringComparison.Ordinal))
         {
@@ -213,15 +207,7 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
                 throw CreateFormatException(node, "An XBEL container contains an unsupported node.");
             }
 
-            items.Add(element.Name.LocalName switch
-            {
-                "folder" when element.Name.Namespace == XNamespace.None =>
-                    ParseFolder(element, identifiers, depth + 1),
-                "bookmark" when element.Name.Namespace == XNamespace.None => ParseBookmark(element, identifiers),
-                _ => throw CreateFormatException(
-                    element,
-                    $"Unsupported XBEL element '{element.Name}'.")
-            });
+            items.Add(ParseItem(element, identifiers, depth, "Unsupported XBEL element"));
         }
 
         return items;
@@ -277,17 +263,23 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
                 throw CreateFormatException(node, "A folder contains an unsupported node.");
             }
 
-            items.Add(child.Name.LocalName switch
-            {
-                "folder" when child.Name.Namespace == XNamespace.None =>
-                    ParseFolder(child, identifiers, depth + 1),
-                "bookmark" when child.Name.Namespace == XNamespace.None => ParseBookmark(child, identifiers),
-                _ => throw CreateFormatException(child, $"Unsupported folder child '{child.Name}'.")
-            });
+            items.Add(ParseItem(child, identifiers, depth, "Unsupported folder child"));
         }
 
         return items;
     }
+
+    private static XbelItem ParseItem(
+        XElement element,
+        ISet<long> identifiers,
+        int depth,
+        string unsupportedElementMessage) => element.Name.LocalName switch
+        {
+            "folder" when element.Name.Namespace == XNamespace.None =>
+                ParseFolder(element, identifiers, depth + 1),
+            "bookmark" when element.Name.Namespace == XNamespace.None => ParseBookmark(element, identifiers),
+            _ => throw CreateFormatException(element, $"{unsupportedElementMessage} '{element.Name}'.")
+        };
 
     private static string ParseTitle(XElement element)
     {
@@ -357,14 +349,6 @@ public sealed partial class FloccusXbelSerializer : IXbelDocumentSerializer
             throw CreateFormatException(
                 element,
                 $"The {element.Name.LocalName} element has missing or unsupported attributes.");
-        }
-    }
-
-    private static void ValidateElementName(XElement element, string expectedName)
-    {
-        if (element.Name != XName.Get(expectedName))
-        {
-            throw CreateFormatException(element, $"Expected the {expectedName} element.");
         }
     }
 

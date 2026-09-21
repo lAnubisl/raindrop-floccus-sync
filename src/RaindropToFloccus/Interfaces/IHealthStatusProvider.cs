@@ -1,5 +1,3 @@
-using RaindropToFloccus.Models;
-
 namespace RaindropToFloccus.Interfaces;
 
 public interface IHealthStatusProvider
@@ -10,4 +8,3 @@ public interface IHealthStatusProvider
 
     void MarkDegraded();
 }
-

@@ -1,7 +1,3 @@
-using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Models;
-using ApplicationLogger = RaindropToFloccus.Interfaces.ILogger;
-
 namespace RaindropToFloccus.Services;
 
 public sealed class GitToRaindropInitializationService : IInitialSynchronizationService

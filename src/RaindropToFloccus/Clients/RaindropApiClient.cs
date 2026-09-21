@@ -1,14 +1,3 @@
-using System.Globalization;
-using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using RaindropToFloccus.Interfaces;
-using RaindropToFloccus.Models;
-using ApplicationConfigurationProvider = RaindropToFloccus.Interfaces.IConfigurationProvider;
-using ApplicationLogger = RaindropToFloccus.Interfaces.ILogger;
-
 namespace RaindropToFloccus.Clients;
 
 public sealed class RaindropApiClient : IRaindropClient
@@ -194,10 +183,7 @@ public sealed class RaindropApiClient : IRaindropClient
             var created = await SendAsync(HttpMethod.Post, "raindrops",
                 new { items = batch.Select(BookmarkBody).ToArray() }, "create bookmarks", root =>
                     ReadCreatedBookmarkBatch(root, batch.Length, seenIds), cancellationToken);
-            foreach (var bookmark in created)
-            {
-                _logger.Info($"Added bookmark \"{bookmark.Title}\" to Raindrop.");
-            }
+            LogBookmarks(created, "Added", "to");
             yield return Array.AsReadOnly(created);
         }
     }
@@ -227,10 +213,15 @@ public sealed class RaindropApiClient : IRaindropClient
                 new { ids = batch.Select(item => item.Id).ToArray(), collection = Reference(targetCollectionId) },
                 "move bookmarks",
                 root => ValidateMoveResponse(root, batch.Length), cancellationToken, allowNoContent: true);
-            foreach (var bookmark in batch)
-            {
-                _logger.Info($"Changed bookmark \"{bookmark.Title}\" in Raindrop.");
-            }
+            LogBookmarks(batch, "Changed", "in");
+        }
+    }
+
+    private void LogBookmarks(RaindropBookmark[] batch, string action, string preposition)
+    {
+        foreach (var bookmark in batch)
+        {
+            _logger.Info($"{action} bookmark \"{bookmark.Title}\" {preposition} Raindrop.");
         }
     }
 
@@ -248,10 +239,7 @@ public sealed class RaindropApiClient : IRaindropClient
             await SendAsync(HttpMethod.Delete, $"raindrops/{IdText(sourceCollectionId)}",
                 new { ids = batch.Select(item => item.Id).ToArray() }, "trash bookmarks", _ => true,
                 cancellationToken, allowNoContent: true);
-            foreach (var bookmark in batch)
-            {
-                _logger.Info($"Removed bookmark \"{bookmark.Title}\" from Raindrop.");
-            }
+            LogBookmarks(batch, "Removed", "from");
         }
     }
 
@@ -488,10 +476,7 @@ public sealed class RaindropApiClient : IRaindropClient
 
     private static void RequireResponse(bool condition)
     {
-        if (!condition)
-        {
-            throw new InvalidDataException();
-        }
+        if (!condition) throw new InvalidDataException();
     }
 
     private static RaindropApiException InvalidResponse(string operation, bool isWrite) =>

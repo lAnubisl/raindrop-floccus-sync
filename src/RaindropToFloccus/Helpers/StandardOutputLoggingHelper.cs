@@ -1,8 +1,3 @@
-using System.Globalization;
-using RaindropToFloccus.Models;
-using ApplicationConfigurationProvider = RaindropToFloccus.Interfaces.IConfigurationProvider;
-using ApplicationLogger = RaindropToFloccus.Interfaces.ILogger;
-
 namespace RaindropToFloccus.Helpers;
 
 public sealed class StandardOutputLoggingHelper : ApplicationLogger
